@@ -28,7 +28,8 @@ LOGO=manjarolinux
 #### 安装使用教程
 
 ```bash
-cd ./aic8000/drivers/aic8000
+cd ./aic8000 && ./install_setup.sh
+cd ./drivers/aic8000
 make && make install
 modprobe aic8800_fdrv
 ```
