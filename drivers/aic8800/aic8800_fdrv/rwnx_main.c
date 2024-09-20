@@ -1057,7 +1057,9 @@ static void rwnx_csa_finish(struct work_struct *ws)
         cfg80211_disconnected(vif->ndev, 0, NULL, 0, 0, GFP_KERNEL);
         #endif
     } else {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0))
         mutex_lock(&vif->wdev.mtx);
+#endif
         __acquire(&vif->wdev.mtx);
         spin_lock_bh(&rwnx_hw->cb_lock);
         rwnx_chanctx_unlink(vif);
@@ -1068,14 +1070,19 @@ static void rwnx_csa_finish(struct work_struct *ws)
         } else
             rwnx_txq_vif_stop(vif, RWNX_TXQ_STOP_CHAN, rwnx_hw);
         spin_unlock_bh(&rwnx_hw->cb_lock);
-#if (LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION3)
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0))
+		cfg80211_ch_switch_notify(vif->ndev, &csa->chandef, 0);
+#elif (LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION3)
 		cfg80211_ch_switch_notify(vif->ndev, &csa->chandef, 0, 0);
 #elif (LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION)
 		cfg80211_ch_switch_notify(vif->ndev, &csa->chandef, 0);
 #else
 		cfg80211_ch_switch_notify(vif->ndev, &csa->chandef);
 #endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 7, 0)) 
         mutex_unlock(&vif->wdev.mtx);
+#endif
         __release(&vif->wdev.mtx);
     }
     rwnx_del_csa(vif);
@@ -5018,8 +5025,13 @@ static int rwnx_cfg80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
  * @change_beacon: Change the beacon parameters for an access point mode
  *	interface. This should reject the call when AP mode wasn't started.
  */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+static int rwnx_cfg80211_change_beacon(struct wiphy *wiphy, struct net_device *dev,
+				       struct cfg80211_ap_update *params)
+#else
 static int rwnx_cfg80211_change_beacon(struct wiphy *wiphy, struct net_device *dev,
                                        struct cfg80211_beacon_data *info)
+#endif
 {
     struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
     struct rwnx_vif *vif = netdev_priv(dev);
@@ -5033,7 +5045,11 @@ static int rwnx_cfg80211_change_beacon(struct wiphy *wiphy, struct net_device *d
 	elem.dma_addr = 0;
 
     // Build the beacon
-    buf = rwnx_build_bcn(bcn, info);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+	buf = rwnx_build_bcn(bcn, &params->beacon);
+#else
+ 	buf = rwnx_build_bcn(bcn, info);
+#endif    
     if (!buf)
         return -ENOMEM;
 
@@ -5954,7 +5970,9 @@ int rwnx_cfg80211_channel_switch(struct wiphy *wiphy,
         goto end;
     } else {
         INIT_WORK(&csa->work, rwnx_csa_finish);
-#if LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION4
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0))
+		cfg80211_ch_switch_started_notify(dev, &csa->chandef, 0, params->count, false);
+#elif LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION4
 		cfg80211_ch_switch_started_notify(dev, &csa->chandef, 0, params->count, false, 0);
 #elif LINUX_VERSION_CODE >= HIGH_KERNEL_VERSION2
         cfg80211_ch_switch_started_notify(dev, &csa->chandef, 0, params->count, false);
